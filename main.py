@@ -11,6 +11,7 @@ FONT_SIZE = 40
 BLINK = True
 BLINK_SPEED = 600
 RAND_INTERVAL = 200
+TIME_LIMIT = 30000
 
 COLOR_PRIME_1 = [220, 0, 0]
 COLOR_PRIME_2 = [255, 255, 0]
@@ -53,6 +54,7 @@ class GameIQ180():
 		self.game_recent_clock = 0
 		self.slots = [0] * 5
 		self.target = 0
+		self.round = 0
 
 		self.BLINK_EVENT = pygame.USEREVENT + 1
 		pygame.time.set_timer(self.BLINK_EVENT, BLINK_SPEED)
@@ -111,22 +113,25 @@ class GameIQ180():
 				if self.scene == 'game':
 					self.game_state = (self.game_state + 1) % 4
 					self.bell_sound[1] = False
+					if self.game_state == 0:
+						self.round += 1
 				self.key_timer = now_time
 
 		elif kbinput[pygame.K_ESCAPE]:
 			now_time = pygame.time.get_ticks()
-			if now_time - game.key_timer >= 200:
-				if game.scene == 'game': 
-					game.scene = 'mode_selection'
-					game.game_state = -1
-				elif game.scene == 'mode_selection':
-					game.scene = 'start'
-				game.bell_sound[1] = False
-				game.slot_music[1] = False
-				game.game_music[1] = False
-				pygame.mixer.Sound.stop(game.slot_music[0])
-				pygame.mixer.Sound.stop(game.game_music[0])
-				game.key_timer = now_time
+			if now_time - self.key_timer >= 200:
+				if self.scene == 'game': 
+					self.scene = 'mode_selection'
+					self.game_state = -1
+					self.round = 0
+				elif self.scene == 'mode_selection':
+					self.scene = 'start'
+				self.bell_sound[1] = False
+				self.slot_music[1] = False
+				self.game_music[1] = False
+				pygame.mixer.Sound.stop(self.slot_music[0])
+				pygame.mixer.Sound.stop(self.game_music[0])
+				self.key_timer = now_time
 
 		
 	def str_clock(x):
@@ -222,8 +227,15 @@ class GameIQ180():
 			self.target.str = '0' * max(2, self.num_digit-2)
 
 			self.counter = SlotNumber(ini='READY', size=1)
-			self.counter.pos = (SCREEN_WIDTH/2, 0.05*SCREEN_HEIGHT)
+			self.counter.pos = (0.95*SCREEN_WIDTH, 0.025*SCREEN_HEIGHT)
+
+			self.round_text = SlotNumber(ini=f'ROUND: {self.round}', size=1)
+			self.round_text.pos = (0.05*SCREEN_WIDTH, 0.025*SCREEN_HEIGHT)
 			
+			self.state_text = SlotNumber(size=1)
+			self.state_text.pos = (SCREEN_WIDTH/2, 0.05*SCREEN_HEIGHT)
+			
+
 			self.game_key_pressed()
 
 		elif scene == 'game':
@@ -234,11 +246,12 @@ class GameIQ180():
 			if self.game_state == 0: # Initialization
 				self.game_music[0].set_volume(0.4)
 				self.play_sound(self.game_music, loops=-1)
-				self.counter.str = 'READY'
+				self.counter.str = ''
+				self.state_text.str = 'READY'
 				for k in range(self.num_digit):
 					self.slots[k].str = '0'
 				self.target.str = '0' * max(2, self.num_digit-2)
-			
+
 			elif self.game_state == 1: # Random
 				self.game_music[0].set_volume(0.4)
 				if not self.slot_music[1]:
@@ -250,7 +263,8 @@ class GameIQ180():
 					self.target.roll(100, 1000)
 				else:
 					self.target.roll(10, 100)
-				self.counter.str = 'SET'
+				self.state_text.str = 'SET'
+				self.counter.str = ''
 			
 			elif self.game_state == 2: # Freeze/ Clock run
 				self.game_music[0].set_volume(1)
@@ -262,14 +276,19 @@ class GameIQ180():
 					now = pygame.time.get_ticks()
 					self.game_tick = now
 				counter_time = pygame.time.get_ticks() - self.game_tick
-				self.counter.str = 'START ' + GameIQ180.str_clock(counter_time)
+				if counter_time >= TIME_LIMIT:
+					counter_time = TIME_LIMIT
+					self.game_state = (self.game_state + 1) % 4
+				self.state_text.str = 'START'
+				self.counter.str =  GameIQ180.str_clock(counter_time)
 				self.game_recent_clock = counter_time
 			
 			elif self.game_state == 3: # Clock stop
 				self.game_music[0].set_volume(0.25)
 				self.play_sound(self.bell_sound, loops=2)
 				self.game_tick = 0
-				self.counter.str = 'STOP  ' + GameIQ180.str_clock(self.game_recent_clock)
+				self.state_text.str = 'STOP'
+				self.counter.str = GameIQ180.str_clock(self.game_recent_clock)
 			
 			else: # Default of game state
 				pass
@@ -277,7 +296,10 @@ class GameIQ180():
 			for k in range(self.num_digit):
 				self.slots[k].draw(self.surface, fg=COLOR_PRIME_1)
 			self.target.draw(self.surface, fg=COLOR_PRIME_1)
-			self.counter.draw(self.surface)
+			self.counter.draw(self.surface, pos='topright')
+			self.round_text.str = f'ROUND: {self.round}'
+			self.round_text.draw(self.surface, pos='topleft')
+			self.state_text.draw(self.surface)
 			self.game_key_pressed()
 
 		else: # Default of scene
@@ -297,15 +319,16 @@ class GameText(pygame.freetype.Font):
 		self.visible = BLINK
 
 			
-	def draw(self, surface, fg=COLOR_FG, bg=COLOR_BG, bgalpha=0):
+	def draw(self, surface, fg=COLOR_FG, bg=COLOR_BG, bgalpha=0, pos='center'):
 		bgalpha = min(255, bgalpha)
 		if len(bg) == 4:
 			bg[3] = bgalpha
 		else:
 			bg = bg + [bgalpha]
 		text_surf, _ = self.render(self.str, fg, bg)
+		p = {pos: self.pos}
 		if self.visible:
-			surface.blit(text_surf, text_surf.get_rect(center=self.pos))
+			surface.blit(text_surf, text_surf.get_rect(**p))
 
 
 class SlotNumber(GameText):
