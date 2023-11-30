@@ -13,12 +13,13 @@ BLINK_SPEED = 600
 RAND_INTERVAL = 200
 TIME_LIMIT = 30000
 
-COLOR_PRIME_1 = [220, 0, 0]
+COLOR_PRIME_1 = [220, 220, 0]
 COLOR_PRIME_2 = [255, 255, 0]
+COLOR_PRIME_3 = [50, 205, 50]
 COLOR_BG = [0, 0, 0]
 COLOR_FG = [255, 255, 255]
 
-
+t = 0
 class GameIQ180():
 	def __init__(self, size=None, scene='start'):
 		pygame.init()
@@ -145,6 +146,7 @@ class GameIQ180():
 		pygame.quit()
 		sys.exit()
 
+
 	def run_scence(self):
 		scene = self.scene
 
@@ -242,6 +244,7 @@ class GameIQ180():
 
 			self.menu_music[0].stop()
 			self.menu_music[1] = False
+			self.bell_sound[0].set_volume(1.25)
 
 			if self.game_state == 0: # Initialization
 				self.game_music[0].set_volume(0.4)
@@ -257,12 +260,23 @@ class GameIQ180():
 				if not self.slot_music[1]:
 					pygame.mixer.Sound.play(self.slot_music[0], loops=-1)
 					self.slot_music[1] = True
+
+				possible_slot = [0] + 2*[1,2,3,4,5,6,7,8,9]
+				p = [None] * self.num_digit
 				for k in range(self.num_digit):
-					self.slots[k].roll(0, 10)
+					valid = False
+					while not valid:
+						self.slots[k].roll(choices=possible_slot)
+						chosen_num = int(self.slots[k].str)
+						if chosen_num in possible_slot:
+							possible_slot.remove(chosen_num)
+							p[k] = possible_slot.copy()
+							valid = True
+
 				if self.num_digit == 5:
-					self.target.roll(100, 1000)
+					self.target.roll(interval=[100, 1000])
 				else:
-					self.target.roll(10, 100)
+					self.target.roll(interval=[10, 100])
 				self.state_text.str = 'SET'
 				self.counter.str = ''
 			
@@ -279,6 +293,7 @@ class GameIQ180():
 				if counter_time >= TIME_LIMIT:
 					counter_time = TIME_LIMIT
 					self.game_state = (self.game_state + 1) % 4
+					self.bell_sound[1] = False
 				self.state_text.str = 'START'
 				self.counter.str =  GameIQ180.str_clock(counter_time)
 				self.game_recent_clock = counter_time
@@ -295,7 +310,7 @@ class GameIQ180():
 
 			for k in range(self.num_digit):
 				self.slots[k].draw(self.surface, fg=COLOR_PRIME_1)
-			self.target.draw(self.surface, fg=COLOR_PRIME_1)
+			self.target.draw(self.surface, fg=COLOR_PRIME_3)
 			self.counter.draw(self.surface, pos='topright')
 			self.round_text.str = f'ROUND: {self.round}'
 			self.round_text.draw(self.surface, pos='topleft')
@@ -337,17 +352,24 @@ class SlotNumber(GameText):
 		self.str = ini
 		self.next_roll = SlotNumber.next_roll()
 
-	def roll(self, x=0, y=9):
+	def roll(self, choices=None, interval=None):
 		if pygame.time.get_ticks() > self.next_roll:
-			self.str = str(np.random.randint(x, y))
+			if interval is not None:
+				x, y = interval[0], interval[1]
+				self.str = str(np.random.randint(x, y))
+			elif choices is not None:
+				n = len(choices)
+				r = np.random.randint(0, n)
+				self.str = str(choices[r])
 			self.next_roll = SlotNumber.next_roll()
 
 	def next_roll():
 		return pygame.time.get_ticks() + np.random.rand()*RAND_INTERVAL
 
+
 	
 
 if __name__ == '__main__':
-	game = GameIQ180(size='semifull')
+	game = GameIQ180(size='full')
 	game.launch()
 	game.quit()
