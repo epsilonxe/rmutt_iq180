@@ -281,7 +281,7 @@ class GameIQ180():
 				self.counter.str = ''
 			
 			elif self.game_state == 2: # Freeze/ Clock run
-				self.game_music[0].set_volume(1)
+				self.game_music[0].set_volume(0.6)
 				if self.slot_music[1]:
 					pygame.mixer.Sound.stop(self.slot_music[0])
 					self.slot_music[1] = False
